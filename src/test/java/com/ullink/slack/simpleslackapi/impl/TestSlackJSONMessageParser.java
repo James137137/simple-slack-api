@@ -41,9 +41,9 @@ public class TestSlackJSONMessageParser
             @Override
             public void connect()
             {
-                SlackUser user1 = new SlackUserImpl("TESTUSER1", "test user 1", "", "", false);
-                SlackUser user2 = new SlackUserImpl("TESTUSER2", "test user 2", "", "", false);
-                SlackUser user3 = new SlackUserImpl("TESTUSER3", "test user 3", "", "", false);
+                SlackUser user1 = new SlackUserImpl("TESTUSER1", "test user 1", "", "", false,false,false,false,false,false, false);
+                SlackUser user2 = new SlackUserImpl("TESTUSER2", "test user 2", "", "", false,false,false,false,false,false, false);
+                SlackUser user3 = new SlackUserImpl("TESTUSER3", "test user 3", "", "", false,false,false,false,false,false, false);
                 users.put(user1.getId(), user1);
                 users.put(user2.getId(), user2);
                 users.put(user3.getId(), user3);
@@ -54,6 +54,11 @@ public class TestSlackJSONMessageParser
                 channels.put(channel1.getId(), channel1);
                 channels.put(channel2.getId(), channel2);
                 channels.put(channel3.getId(), channel3);
+            }
+
+            @Override
+            public void disconnect()
+            {
             }
 
             @Override
@@ -81,6 +86,24 @@ public class TestSlackJSONMessageParser
 
             @Override
             public SlackMessageHandle updateMessage(String timeStamp, SlackChannel channel, String message)
+            {
+                return null;
+            }
+
+            @Override
+            public SlackMessageHandle addReactionToMessage(SlackChannel channel, String messageTimeStamp, String emojiCode)
+            {
+                return null;
+            }
+
+            @Override
+            public SlackMessageHandle joinChannel(String channelName)
+            {
+                return null;
+            }
+
+            @Override
+            public SlackMessageHandle leaveChannel(SlackChannel channel)
             {
                 return null;
             }

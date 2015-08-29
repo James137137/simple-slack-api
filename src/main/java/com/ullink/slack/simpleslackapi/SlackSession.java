@@ -41,6 +41,8 @@ public interface SlackSession
 
     void connect() throws IOException;
 
+    void disconnect() throws IOException;
+
     SlackMessageHandle deleteMessage(String timeStamp, SlackChannel channel);
 
     SlackMessageHandle sendMessage(SlackChannel channel, String message, SlackAttachment attachment, SlackChatConfiguration chatConfiguration);
@@ -50,6 +52,12 @@ public interface SlackSession
     SlackMessageHandle updateMessage(String timeStamp, SlackChannel channel, String message);
 
     SlackMessageHandle sendMessageOverWebSocket(SlackChannel channel, String message, SlackAttachment attachment);
+
+    SlackMessageHandle addReactionToMessage(SlackChannel channel, String messageTimeStamp, String emojiCode);
+
+    SlackMessageHandle joinChannel(String channelName);
+
+    SlackMessageHandle leaveChannel(SlackChannel channel);
 
     SlackPersona.SlackPresence getPresence(SlackPersona persona);
 

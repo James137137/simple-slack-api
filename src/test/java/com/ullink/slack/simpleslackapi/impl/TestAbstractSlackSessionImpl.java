@@ -1,7 +1,6 @@
 package com.ullink.slack.simpleslackapi.impl;
 
 import static org.assertj.core.api.Assertions.assertThat;
-
 import com.ullink.slack.simpleslackapi.SlackPersona;
 import org.junit.Test;
 import com.ullink.slack.simpleslackapi.SlackAttachment;
@@ -24,16 +23,21 @@ public class TestAbstractSlackSessionImpl
             channels.put("channelid4",new SlackChannelImpl("channelid4", "testchannel4", "topicchannel4", "topicchannel4", false));
             channels.put("channelid5",new SlackChannelImpl("channelid5", "testchannel5", "topicchannel5", "topicchannel5", false));
 
-            users.put("userid1",new SlackUserImpl("userid1", "username1", "realname1","userid1@my.mail", false));
-            users.put("userid2",new SlackUserImpl("userid2", "username2", "realname2","userid2@my.mail", false));
-            users.put("userid3",new SlackUserImpl("userid3", "username3", "realname3","userid3@my.mail", true));
-            users.put("userid4",new SlackUserImpl("userid4", "username4", "realname4","userid4@my.mail", false));
-            users.put("userid5",new SlackUserImpl("userid5", "username5", "realname4","userid5@my.mail", true));
+            users.put("userid1",new SlackUserImpl("userid1", "username1", "realname1","userid1@my.mail", false,false,false,false,false,false, false));
+            users.put("userid2",new SlackUserImpl("userid2", "username2", "realname2","userid2@my.mail", false,false,false,false,false,false, false));
+            users.put("userid3",new SlackUserImpl("userid3", "username3", "realname3","userid3@my.mail", true,false,false,false,false,false, false));
+            users.put("userid4",new SlackUserImpl("userid4", "username4", "realname4","userid4@my.mail", false,false,false,false,false,false, false));
+            users.put("userid5",new SlackUserImpl("userid5", "username5", "realname4","userid5@my.mail", true,false,false,false,false,false, false));
 
-            bots.put("botid1",new SlackBotImpl("botid1", "botname1", false));
-            bots.put("botid2",new SlackBotImpl("botid2", "botname2", false));
-            bots.put("botid3",new SlackBotImpl("botid3", "botname2", true));
+            users.put("botid1",new SlackUserImpl("botid1", "botname1", "real bot name 1", null,false,false,false,false,false,false,true));
+            users.put("botid2",new SlackUserImpl("botid2", "botname2", "real bot name 2", null,false,false,false,false,false,false,true));
+            users.put("botid3",new SlackUserImpl("botid3", "botname3", "real bot name 3", null, true,false,false,false,false,false,true));
 
+        }
+
+        @Override
+        public void disconnect()
+        {
         }
 
         @Override
@@ -61,6 +65,24 @@ public class TestAbstractSlackSessionImpl
 
         @Override
         public SlackMessageHandle updateMessage(String timeStamp, SlackChannel channel, String message)
+        {
+            return null;
+        }
+
+        @Override
+        public SlackMessageHandle addReactionToMessage(SlackChannel channel, String messageTimeStamp, String emojiCode)
+        {
+            return null;
+        }
+
+        @Override
+        public SlackMessageHandle joinChannel(String channelName)
+        {
+            return null;
+        }
+
+        @Override
+        public SlackMessageHandle leaveChannel(SlackChannel channel)
         {
             return null;
         }
