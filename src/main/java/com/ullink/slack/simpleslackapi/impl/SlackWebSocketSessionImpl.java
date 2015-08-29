@@ -31,8 +31,6 @@ import org.glassfish.tyrus.client.ClientProperties;
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import com.google.common.io.CharStreams;
 import com.ullink.slack.simpleslackapi.*;
 import com.ullink.slack.simpleslackapi.events.*;
@@ -109,7 +107,7 @@ class SlackWebSocketSessionImpl extends AbstractSlackSessionImpl implements Slac
         }
     }
 
-    private static final Logger               LOGGER                     = LoggerFactory.getLogger(SlackWebSocketSessionImpl.class);
+    
 
     private static final String               SLACK_HTTPS_AUTH_URL       = "https://slack.com/api/rtm.start?token=";
 
@@ -153,7 +151,6 @@ class SlackWebSocketSessionImpl extends AbstractSlackSessionImpl implements Slac
     {
         wantDisconnect = false;
         connectImpl();
-        LOGGER.debug("starting connection monitoring");
         startConnectionMonitoring();
     }
 
@@ -161,21 +158,18 @@ class SlackWebSocketSessionImpl extends AbstractSlackSessionImpl implements Slac
     public void disconnect()
     {
         wantDisconnect = true;
-        LOGGER.debug("Disconnecting from the Slack server");
         disconnectImpl();
         stopConnectionMonitoring();
     }
 
     private void connectImpl() throws IOException, ClientProtocolException, ConnectException
     {
-        LOGGER.info("connecting to slack");
         lastPingSent = 0;
         lastPingAck = 0;
         HttpClient httpClient = getHttpClient();
         HttpGet request = new HttpGet(SLACK_HTTPS_AUTH_URL + authToken);
         HttpResponse response;
         response = httpClient.execute(request);
-        LOGGER.debug(response.getStatusLine().toString());
         String jsonResponse = CharStreams.toString(new InputStreamReader(response.getEntity().getContent()));
         SlackJSONSessionStatusParser sessionParser = new SlackJSONSessionStatusParser(jsonResponse);
         try
@@ -184,28 +178,22 @@ class SlackWebSocketSessionImpl extends AbstractSlackSessionImpl implements Slac
         }
         catch (ParseException e1)
         {
-            LOGGER.error(e1.toString());
         }
         if (sessionParser.getError() != null)
         {
-            LOGGER.error("Error during authentication : " + sessionParser.getError());
             throw new ConnectException(sessionParser.getError());
         }
         users = sessionParser.getUsers();
         channels = sessionParser.getChannels();
         sessionPersona = sessionParser.getSessionPersona();
-        LOGGER.info(users.size() + " users found on this session");
-        LOGGER.info(channels.size() + " channels found on this session");
         String wssurl = sessionParser.getWebSocketURL();
 
-        LOGGER.debug("retrieved websocket URL : " + wssurl);
         ClientManager client = ClientManager.createClient();
         if (proxyAddress != null)
         {
             client.getProperties().put(ClientProperties.PROXY_URI, "http://" + proxyAddress + ":" + proxyPort);
         }
         final MessageHandler handler = this;
-        LOGGER.debug("initiating connection to websocket");
         try
         {
             websocketSession = client.connectToServer(new Endpoint()
@@ -220,14 +208,11 @@ class SlackWebSocketSessionImpl extends AbstractSlackSessionImpl implements Slac
         }
         catch (DeploymentException e)
         {
-            LOGGER.error(e.toString());
         }
         if (websocketSession != null)
         {
             SlackConnectedImpl slackConnectedImpl = new SlackConnectedImpl(sessionPersona);
             dispatcher.dispatch(slackConnectedImpl);
-            LOGGER.debug("websocket connection established");
-            LOGGER.info("slack session ready");
         }
     }
 
@@ -257,7 +242,6 @@ class SlackWebSocketSessionImpl extends AbstractSlackSessionImpl implements Slac
             @Override
             public void run()
             {
-                LOGGER.debug("monitoring thread started");
                 while (true)
                 {
                     try
@@ -272,7 +256,6 @@ class SlackWebSocketSessionImpl extends AbstractSlackSessionImpl implements Slac
                         if (lastPingSent != lastPingAck || websocketSession == null)
                         {
                             // disconnection happened
-                            LOGGER.warn("Connection lost...");
                             try
                             {
                                 if (websocketSession != null)
@@ -282,7 +265,7 @@ class SlackWebSocketSessionImpl extends AbstractSlackSessionImpl implements Slac
                             }
                             catch (IOException e)
                             {
-                                LOGGER.error("exception while trying to close the websocket ", e);
+                             
                             }
                             websocketSession = null;
                             if (reconnectOnDisconnection)
@@ -298,7 +281,7 @@ class SlackWebSocketSessionImpl extends AbstractSlackSessionImpl implements Slac
                         else
                         {
                             lastPingSent = getNextMessageId();
-                            LOGGER.debug("sending ping " + lastPingSent);
+                          
                             try
                             {
                                 if (websocketSession.isOpen())
@@ -326,10 +309,8 @@ class SlackWebSocketSessionImpl extends AbstractSlackSessionImpl implements Slac
                     }
                     catch (IOException e)
                     {
-                        LOGGER.error("unexpected exception on monitoring thread ", e);
                     }
                 }
-                LOGGER.debug("monitoring thread stopped");
             }
         };
 
@@ -464,7 +445,6 @@ class SlackWebSocketSessionImpl extends AbstractSlackSessionImpl implements Slac
             request.setEntity(new UrlEncodedFormEntity(nameValuePairList, "UTF-8"));
             HttpResponse response = client.execute(request);
             String jsonResponse = CharStreams.toString(new InputStreamReader(response.getEntity().getContent()));
-            LOGGER.debug("PostMessage return: " + jsonResponse);
             SlackReplyImpl reply = SlackJSONReplyParser.decode(parseObject(jsonResponse));
             handle.setSlackReply(reply);
         }
@@ -526,7 +506,6 @@ class SlackWebSocketSessionImpl extends AbstractSlackSessionImpl implements Slac
             request.setEntity(new UrlEncodedFormEntity(nameValuePairList, "UTF-8"));
             HttpResponse response = client.execute(request);
             String jsonResponse = CharStreams.toString(new InputStreamReader(response.getEntity().getContent()));
-            LOGGER.debug("PostMessage return: " + jsonResponse);
             JSONObject resultObject = parseObject(jsonResponse);
 
             SlackReplyImpl reply = SlackJSONReplyParser.decode(resultObject);
@@ -561,13 +540,11 @@ class SlackWebSocketSessionImpl extends AbstractSlackSessionImpl implements Slac
     @Override
     public void onMessage(String message)
     {
-        LOGGER.debug("receiving from websocket " + message);
         if (message.contains("{\"type\":\"pong\",\"reply_to\""))
         {
             int rightBracketIdx = message.indexOf('}');
             String toParse = message.substring(26, rightBracketIdx);
             lastPingAck = Integer.parseInt(toParse);
-            LOGGER.debug("pong received " + lastPingAck);
         }
         else
         {
