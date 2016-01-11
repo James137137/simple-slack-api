@@ -90,6 +90,6 @@ class SlackJSONAttachmentFormatter
 
     public static void main(String[] args) throws UnsupportedEncodingException
     {
-        System.out.println(new String("Loïc Herve".getBytes(), "UTF-8"));
+        System.out.println(new String("Loic Herve".getBytes(), "UTF-8"));
     }
 }
