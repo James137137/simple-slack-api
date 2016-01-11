@@ -2,15 +2,14 @@ package com.ullink.slack.simpleslackapi;
 
 import java.io.IOException;
 import java.util.Collection;
-import com.ullink.slack.simpleslackapi.events.SlackEvent;
-import com.ullink.slack.simpleslackapi.events.SlackEventType;
+
 import com.ullink.slack.simpleslackapi.impl.SlackChatConfiguration;
 import com.ullink.slack.simpleslackapi.listeners.SlackChannelArchivedListener;
 import com.ullink.slack.simpleslackapi.listeners.SlackChannelCreatedListener;
 import com.ullink.slack.simpleslackapi.listeners.SlackChannelDeletedListener;
 import com.ullink.slack.simpleslackapi.listeners.SlackChannelRenamedListener;
 import com.ullink.slack.simpleslackapi.listeners.SlackChannelUnarchivedListener;
-import com.ullink.slack.simpleslackapi.listeners.SlackEventListener;
+import com.ullink.slack.simpleslackapi.listeners.SlackConnectedListener;
 import com.ullink.slack.simpleslackapi.listeners.SlackGroupJoinedListener;
 import com.ullink.slack.simpleslackapi.listeners.SlackMessageDeletedListener;
 import com.ullink.slack.simpleslackapi.listeners.SlackMessagePostedListener;
@@ -38,6 +37,8 @@ public interface SlackSession
     SlackPersona sessionPersona();
 
     SlackBot findBotById(String botId);
+    
+    SlackMessageHandle inviteUser(String email, String firstName, boolean setActive);
 
     void connect() throws IOException;
 
@@ -97,4 +98,22 @@ public interface SlackSession
 
     void removeGroupJoinedListener(SlackGroupJoinedListener listener);
 
+    /*
+     * Subscribe to events related to the connection to the slack
+     * server. At this time a set of status information is exchanged that
+     * is useful to implementing bots.
+     * 
+     * For example, the current user that is connecting.
+     * knowing your own user id will help you stop answering your own
+     * questions.
+     */
+    void addSlackConnectedListener(SlackConnectedListener listner);
+    
+    void removeSlackConnectedListener(SlackConnectedListener listener);
+
+    /**
+     * 
+     * @return true if connection is open
+     */
+    boolean isConnected();
 }

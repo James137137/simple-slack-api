@@ -52,6 +52,8 @@ class SlackWebSocketSessionImpl extends AbstractSlackSessionImpl implements Slac
     private static final String CHAT_UPDATE_COMMAND       = "chat.update";
 
     private static final String REACTIONS_ADD_COMMAND     = "reactions.add";
+    
+    private static final String INVITE_USER_COMMAND     = "users.admin.invite";
 
     public class EventDispatcher
     {
@@ -91,7 +93,7 @@ class SlackWebSocketSessionImpl extends AbstractSlackSessionImpl implements Slac
                     dispatchImpl((SlackReplyEvent) event, slackReplyListener);
                     break;
                 case SLACK_CONNECTED:
-                    dispatchImpl((SlackConnected) event, slackConnectedLinster);
+                    dispatchImpl((SlackConnected) event, slackConnectedListener);
                     break;
                 case UNKNOWN:
                     throw new IllegalArgumentException("event not handled " + event);
@@ -161,7 +163,12 @@ class SlackWebSocketSessionImpl extends AbstractSlackSessionImpl implements Slac
         disconnectImpl();
         stopConnectionMonitoring();
     }
-
+    
+    @Override
+    public boolean isConnected(){
+        return websocketSession!=null?websocketSession.isOpen():false;
+    }
+    
     private void connectImpl() throws IOException, ClientProtocolException, ConnectException
     {
         lastPingSent = 0;
@@ -577,6 +584,19 @@ class SlackWebSocketSessionImpl extends AbstractSlackSessionImpl implements Slac
             e.printStackTrace();
             return null;
         }
+    }
+
+    @Override
+    public SlackMessageHandle inviteUser(String email, String firstName, boolean setActive) {
+
+        SlackMessageHandleImpl handle = new SlackMessageHandleImpl(getNextMessageId());
+        Map<String, String> arguments = new HashMap<>();
+        arguments.put("token", authToken);
+        arguments.put("email", email);
+        arguments.put("first_name", firstName);
+        arguments.put("set_active", ""+setActive);
+        postSlackCommand(arguments, INVITE_USER_COMMAND, handle);
+        return handle;
     }
 
 }

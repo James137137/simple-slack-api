@@ -1,12 +1,15 @@
 package com.ullink.slack.simpleslackapi.impl;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import com.ullink.slack.simpleslackapi.SlackPersona;
 import org.junit.Test;
+
 import com.ullink.slack.simpleslackapi.SlackAttachment;
 import com.ullink.slack.simpleslackapi.SlackChannel;
 import com.ullink.slack.simpleslackapi.SlackMessageHandle;
-
+import com.ullink.slack.simpleslackapi.SlackPersona;
+import com.ullink.slack.simpleslackapi.listeners.SlackConnectedListener;
+import com.ullink.slack.simpleslackapi.events.SlackConnected;
+import com.ullink.slack.simpleslackapi.SlackSession;
 
 public class TestAbstractSlackSessionImpl
 {
@@ -23,15 +26,15 @@ public class TestAbstractSlackSessionImpl
             channels.put("channelid4",new SlackChannelImpl("channelid4", "testchannel4", "topicchannel4", "topicchannel4", false));
             channels.put("channelid5",new SlackChannelImpl("channelid5", "testchannel5", "topicchannel5", "topicchannel5", false));
 
-            users.put("userid1",new SlackUserImpl("userid1", "username1", "realname1","userid1@my.mail", false,false,false,false,false,false, false));
-            users.put("userid2",new SlackUserImpl("userid2", "username2", "realname2","userid2@my.mail", false,false,false,false,false,false, false));
-            users.put("userid3",new SlackUserImpl("userid3", "username3", "realname3","userid3@my.mail", true,false,false,false,false,false, false));
-            users.put("userid4",new SlackUserImpl("userid4", "username4", "realname4","userid4@my.mail", false,false,false,false,false,false, false));
-            users.put("userid5",new SlackUserImpl("userid5", "username5", "realname4","userid5@my.mail", true,false,false,false,false,false, false));
+            users.put("userid1",new SlackUserImpl("userid1", "username1", "realname1","userid1@my.mail", false,false,false,false,false,false, false,"tz","tzLabel",new Integer(0)));
+            users.put("userid2",new SlackUserImpl("userid2", "username2", "realname2","userid2@my.mail", false,false,false,false,false,false, false,"tz","tzLabel",new Integer(0)));
+            users.put("userid3",new SlackUserImpl("userid3", "username3", "realname3","userid3@my.mail", true,false,false,false,false,false, false,"tz","tzLabel",new Integer(0)));
+            users.put("userid4",new SlackUserImpl("userid4", "username4", "realname4","userid4@my.mail", false,false,false,false,false,false, false,"tz","tzLabel",new Integer(0)));
+            users.put("userid5",new SlackUserImpl("userid5", "username5", "realname4","userid5@my.mail", true,false,false,false,false,false, false,"tz","tzLabel",new Integer(0)));
 
-            users.put("botid1",new SlackUserImpl("botid1", "botname1", "real bot name 1", null,false,false,false,false,false,false,true));
-            users.put("botid2",new SlackUserImpl("botid2", "botname2", "real bot name 2", null,false,false,false,false,false,false,true));
-            users.put("botid3",new SlackUserImpl("botid3", "botname3", "real bot name 3", null, true,false,false,false,false,false,true));
+            users.put("botid1",new SlackUserImpl("botid1", "botname1", "real bot name 1", null,false,false,false,false,false,false,true,"tz","tzLabel",new Integer(0)));
+            users.put("botid2",new SlackUserImpl("botid2", "botname2", "real bot name 2", null,false,false,false,false,false,false,true,"tz","tzLabel",new Integer(0)));
+            users.put("botid3",new SlackUserImpl("botid3", "botname3", "real bot name 3", null, true,false,false,false,false,false,true,"tz","tzLabel",new Integer(0)));
 
         }
 
@@ -85,6 +88,23 @@ public class TestAbstractSlackSessionImpl
         public SlackMessageHandle leaveChannel(SlackChannel channel)
         {
             return null;
+        }
+
+        @Override
+        public SlackMessageHandle inviteUser(String email, String firstName, boolean setActive) 
+        {
+            return null;
+        }
+
+        // Helper method with access to abstract class properties.
+        public boolean isListening(SlackConnectedListener expectedListener) 
+        {
+          return slackConnectedListener.contains(expectedListener);
+        }
+
+        @Override
+        public boolean isConnected() {
+            return true;
         }
     }
 
@@ -193,5 +213,30 @@ public class TestAbstractSlackSessionImpl
         assertThat(slackSession.findUserByUserName("unknownuser")).isNull();
     }
 
+    @Test
+    public void testAddConnectedListener() {
+        SlackConnectedListener listener = new SlackConnectedListener() {
+          public void onEvent(SlackConnected event, SlackSession session) {
+          }
+        };
 
+        TestSlackSessionImpl slackSession = new TestSlackSessionImpl();
+        slackSession.addSlackConnectedListener(listener);
+
+        assertThat(slackSession.isListening(listener)).isTrue();
+    }
+
+    @Test
+    public void testRemoveConnectedListener() {
+        SlackConnectedListener listener = new SlackConnectedListener() {
+          public void onEvent(SlackConnected event, SlackSession session) {
+          }
+        };
+
+        TestSlackSessionImpl slackSession = new TestSlackSessionImpl();
+        slackSession.addSlackConnectedListener(listener);
+        slackSession.removeSlackConnectedListener(listener);
+
+        assertThat(slackSession.isListening(listener)).isFalse();
+    }
 }
