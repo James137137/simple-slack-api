@@ -9,3 +9,4 @@
 build/*
 src/main/java/rebel.xml
 /NetbeanProject/nbproject/private/
+/target/
