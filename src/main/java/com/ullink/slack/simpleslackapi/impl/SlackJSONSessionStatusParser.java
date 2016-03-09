@@ -7,8 +7,9 @@ import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
 import com.ullink.slack.simpleslackapi.SlackChannel;
-import com.ullink.slack.simpleslackapi.SlackUser;
 import com.ullink.slack.simpleslackapi.SlackPersona;
+import com.ullink.slack.simpleslackapi.SlackTeam;
+import com.ullink.slack.simpleslackapi.SlackUser;
 
 class SlackJSONSessionStatusParser
 {
@@ -16,7 +17,9 @@ class SlackJSONSessionStatusParser
     private Map<String, SlackChannel> channels = new HashMap<>();
     private Map<String, SlackUser>    users    = new HashMap<>();
 
-    private SlackPersona sessionPersona;
+    private SlackPersona              sessionPersona;
+
+    private SlackTeam                 team;
 
     private String                    webSocketURL;
 
@@ -107,12 +110,20 @@ class SlackJSONSessionStatusParser
         JSONObject selfJson = (JSONObject) jsonResponse.get("self");
         sessionPersona = SlackJSONParsingUtils.buildSlackUser(selfJson);
 
+        JSONObject teamJson = (JSONObject) jsonResponse.get("team");
+        team = SlackJSONParsingUtils.buildSlackTeam(teamJson);
 
         webSocketURL = (String) jsonResponse.get("url");
 
     }
 
-    public SlackPersona getSessionPersona() {
+    public SlackPersona getSessionPersona()
+    {
         return sessionPersona;
+    }
+
+    public SlackTeam getTeam()
+    {
+        return team;
     }
 }

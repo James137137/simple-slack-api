@@ -1,44 +1,20 @@
 package com.ullink.slack.simpleslackapi.impl;
 
-import com.ullink.slack.simpleslackapi.events.SlackEventType;
-import com.ullink.slack.simpleslackapi.events.SlackReplyEvent;
+import com.ullink.slack.simpleslackapi.replies.ParsedSlackReply;
 
-class SlackReplyImpl implements SlackReplyEvent
+class SlackReplyImpl implements ParsedSlackReply
 {
 
     private boolean ok;
-    private long replyTo;
-    private String timestamp;
 
-    SlackReplyImpl(boolean ok, long replyTo, String timestamp)
+    SlackReplyImpl(boolean ok)
     {
         this.ok = ok;
-        this.replyTo = replyTo;
-        this.timestamp = timestamp;
     }
 
     @Override
     public boolean isOk()
     {
-        return ok;
+        return false;
     }
-
-    @Override
-    public long getReplyTo()
-    {
-        return replyTo;
-    }
-
-    @Override
-    public String getTimestamp()
-    {
-        return timestamp;
-    }
-
-    @Override
-    public SlackEventType getEventType()
-    {
-        return SlackEventType.SLACK_REPLY;
-    }
-
 }

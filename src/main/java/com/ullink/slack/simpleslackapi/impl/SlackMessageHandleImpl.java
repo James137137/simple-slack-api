@@ -2,13 +2,13 @@ package com.ullink.slack.simpleslackapi.impl;
 
 import java.util.concurrent.TimeUnit;
 import com.ullink.slack.simpleslackapi.SlackMessageHandle;
-import com.ullink.slack.simpleslackapi.events.SlackReplyEvent;
+import com.ullink.slack.simpleslackapi.replies.SlackReply;
 
-class SlackMessageHandleImpl implements SlackMessageHandle
+class SlackMessageHandleImpl<T extends SlackReply> implements SlackMessageHandle<T>
 {
 
     private long                messageId;
-    private volatile SlackReplyEvent slackReply;
+    private volatile T          slackReply;
 
     public SlackMessageHandleImpl(long messageId)
     {
@@ -22,12 +22,12 @@ class SlackMessageHandleImpl implements SlackMessageHandle
     }
 
     @Override
-    public SlackReplyEvent getSlackReply()
+    public T getReply()
     {
         return slackReply;
     }
 
-    void setSlackReply(SlackReplyEvent slackReply)
+    void setReply(T slackReply)
     {
         this.slackReply = slackReply;
     }
@@ -54,5 +54,4 @@ class SlackMessageHandleImpl implements SlackMessageHandle
             }
         }
     }
-
 }

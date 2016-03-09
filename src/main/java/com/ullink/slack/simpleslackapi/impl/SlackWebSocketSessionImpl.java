@@ -6,6 +6,7 @@ import java.net.ConnectException;
 import java.net.Proxy;
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,18 +33,48 @@ import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
 import com.google.common.io.CharStreams;
-import com.ullink.slack.simpleslackapi.*;
-import com.ullink.slack.simpleslackapi.events.*;
-import com.ullink.slack.simpleslackapi.listeners.*;
+import com.ullink.slack.simpleslackapi.SlackAttachment;
+import com.ullink.slack.simpleslackapi.SlackChannel;
+import com.ullink.slack.simpleslackapi.SlackMessageHandle;
+import com.ullink.slack.simpleslackapi.SlackPersona;
+import com.ullink.slack.simpleslackapi.SlackSession;
+import com.ullink.slack.simpleslackapi.SlackUser;
+import com.ullink.slack.simpleslackapi.events.ReactionAdded;
+import com.ullink.slack.simpleslackapi.events.ReactionRemoved;
+import com.ullink.slack.simpleslackapi.events.SlackChannelArchived;
+import com.ullink.slack.simpleslackapi.events.SlackChannelCreated;
+import com.ullink.slack.simpleslackapi.events.SlackChannelDeleted;
+import com.ullink.slack.simpleslackapi.events.SlackChannelRenamed;
+import com.ullink.slack.simpleslackapi.events.SlackChannelUnarchived;
+import com.ullink.slack.simpleslackapi.events.SlackConnected;
+import com.ullink.slack.simpleslackapi.events.SlackEvent;
+import com.ullink.slack.simpleslackapi.events.SlackGroupJoined;
+import com.ullink.slack.simpleslackapi.events.SlackMessageDeleted;
+import com.ullink.slack.simpleslackapi.events.SlackMessagePosted;
+import com.ullink.slack.simpleslackapi.events.SlackMessageUpdated;
 import com.ullink.slack.simpleslackapi.impl.SlackChatConfiguration.Avatar;
+import com.ullink.slack.simpleslackapi.listeners.SlackEventListener;
+import com.ullink.slack.simpleslackapi.replies.GenericSlackReply;
+import com.ullink.slack.simpleslackapi.replies.SlackChannelReply;
+import com.ullink.slack.simpleslackapi.replies.SlackMessageReply;
+import com.ullink.slack.simpleslackapi.replies.SlackReply;
+import com.ullink.slack.simpleslackapi.replies.SlackUserPresenceReply;
 
 class SlackWebSocketSessionImpl extends AbstractSlackSessionImpl implements SlackSession, MessageHandler.Whole<String>
 {
     private static final String SLACK_API_HTTPS_ROOT      = "https://slack.com/api/";
 
+    private static final String DIRECT_MESSAGE_OPEN_CHANNEL_COMMAND = "im.open";
+
+    private static final String MULTIPARTY_DIRECT_MESSAGE_OPEN_CHANNEL_COMMAND = "mpim.open";
+
     private static final String CHANNELS_LEAVE_COMMAND    = "channels.leave";
 
     private static final String CHANNELS_JOIN_COMMAND     = "channels.join";
+    
+    private static final String CHANNELS_INVITE_COMMAND     = "channels.invite";
+    
+    private static final String CHANNELS_ARCHIVE_COMMAND     = "channels.archive";
 
     private static final String CHAT_POST_MESSAGE_COMMAND = "chat.postMessage";
 
@@ -54,6 +85,40 @@ class SlackWebSocketSessionImpl extends AbstractSlackSessionImpl implements Slac
     private static final String REACTIONS_ADD_COMMAND     = "reactions.add";
     
     private static final String INVITE_USER_COMMAND     = "users.admin.invite";
+
+
+    @Override
+    public SlackMessageHandle<SlackMessageReply> sendMessageToUser(SlackUser user, String message, SlackAttachment attachment) {
+        SlackChannel iMChannel = getIMChannelForUser(user);
+        return sendMessage(iMChannel, message, attachment, DEFAULT_CONFIGURATION);
+    }
+
+    @Override
+    public SlackMessageHandle<SlackMessageReply> sendMessageToUser(String userName, String message, SlackAttachment attachment) {
+        return sendMessageToUser(findUserByUserName(userName), message, attachment);
+    }
+
+    private List<SlackChannel> getAllIMChannels() {
+        Collection<SlackChannel> allChannels = getChannels();
+        List<SlackChannel> iMChannels = new ArrayList<>();
+        for (SlackChannel channel : allChannels) {
+            if (channel.isDirect()) {
+                iMChannels.add(channel);
+            }
+        }
+        return iMChannels;
+    }
+
+    private SlackChannel getIMChannelForUser(SlackUser user) {
+        List<SlackChannel> imcs = getAllIMChannels();
+        for (SlackChannel channel : imcs) {
+            if (channel.getMembers().contains(user)) {
+                return channel;
+            }
+        }
+        SlackMessageHandle<SlackChannelReply> reply = openDirectMessageChannel(user);
+        return reply.getReply().getSlackChannel();
+    }
 
     public class EventDispatcher
     {
@@ -89,11 +154,14 @@ class SlackWebSocketSessionImpl extends AbstractSlackSessionImpl implements Slac
                 case SLACK_MESSAGE_UPDATED:
                     dispatchImpl((SlackMessageUpdated) event, messageUpdatedListener);
                     break;
-                case SLACK_REPLY:
-                    dispatchImpl((SlackReplyEvent) event, slackReplyListener);
-                    break;
                 case SLACK_CONNECTED:
                     dispatchImpl((SlackConnected) event, slackConnectedListener);
+                    break;
+                case REACTION_ADDED:
+                    dispatchImpl((ReactionAdded) event, reactionAddedListener);
+                    break;
+                case REACTION_REMOVED:
+                    dispatchImpl((ReactionRemoved) event, reactionRemovedListener);
                     break;
                 case UNKNOWN:
                     throw new IllegalArgumentException("event not handled " + event);
@@ -109,7 +177,6 @@ class SlackWebSocketSessionImpl extends AbstractSlackSessionImpl implements Slac
         }
     }
 
-    
 
     private static final String               SLACK_HTTPS_AUTH_URL       = "https://slack.com/api/rtm.start?token=";
 
@@ -123,18 +190,13 @@ class SlackWebSocketSessionImpl extends AbstractSlackSessionImpl implements Slac
 
     private long                              messageId                  = 0;
 
-    private long                              lastConnectionTime         = -1;
-
     private boolean                           reconnectOnDisconnection;
     private boolean                           wantDisconnect             = false;
-
-    private Map<Long, SlackMessageHandleImpl> pendingMessageMap          = new ConcurrentHashMap<Long, SlackMessageHandleImpl>();
 
     private Thread                            connectionMonitoringThread = null;
     private EventDispatcher                   dispatcher                 = new EventDispatcher();
 
-    SlackWebSocketSessionImpl(String authToken, Proxy.Type proxyType, String proxyAddress, int proxyPort, boolean reconnectOnDisconnection)
-    {
+    SlackWebSocketSessionImpl(String authToken, Proxy.Type proxyType, String proxyAddress, int proxyPort, boolean reconnectOnDisconnection) {
         this.authToken = authToken;
         this.proxyAddress = proxyAddress;
         this.proxyPort = proxyPort;
@@ -163,12 +225,12 @@ class SlackWebSocketSessionImpl extends AbstractSlackSessionImpl implements Slac
         disconnectImpl();
         stopConnectionMonitoring();
     }
-    
     @Override
-    public boolean isConnected(){
+    public boolean isConnected()
+    {
         return websocketSession!=null?websocketSession.isOpen():false;
     }
-    
+
     private void connectImpl() throws IOException, ClientProtocolException, ConnectException
     {
         lastPingSent = 0;
@@ -193,6 +255,7 @@ class SlackWebSocketSessionImpl extends AbstractSlackSessionImpl implements Slac
         users = sessionParser.getUsers();
         channels = sessionParser.getChannels();
         sessionPersona = sessionParser.getSessionPersona();
+        team = sessionParser.getTeam();
         String wssurl = sessionParser.getWebSocketURL();
 
         ClientManager client = ClientManager.createClient();
@@ -272,7 +335,6 @@ class SlackWebSocketSessionImpl extends AbstractSlackSessionImpl implements Slac
                             }
                             catch (IOException e)
                             {
-                             
                             }
                             websocketSession = null;
                             if (reconnectOnDisconnection)
@@ -288,7 +350,6 @@ class SlackWebSocketSessionImpl extends AbstractSlackSessionImpl implements Slac
                         else
                         {
                             lastPingSent = getNextMessageId();
-                          
                             try
                             {
                                 if (websocketSession.isOpen())
@@ -346,9 +407,9 @@ class SlackWebSocketSessionImpl extends AbstractSlackSessionImpl implements Slac
     }
 
     @Override
-    public SlackMessageHandle sendMessage(SlackChannel channel, String message, SlackAttachment attachment, SlackChatConfiguration chatConfiguration)
+    public SlackMessageHandle<SlackMessageReply> sendMessage(SlackChannel channel, String message, SlackAttachment attachment, SlackChatConfiguration chatConfiguration, boolean unfurl)
     {
-        SlackMessageHandleImpl handle = new SlackMessageHandleImpl(getNextMessageId());
+        SlackMessageHandleImpl<SlackMessageReply> handle = new SlackMessageHandleImpl<SlackMessageReply>(getNextMessageId());
         Map<String, String> arguments = new HashMap<>();
         arguments.put("token", authToken);
         arguments.put("channel", channel.getId());
@@ -373,15 +434,20 @@ class SlackWebSocketSessionImpl extends AbstractSlackSessionImpl implements Slac
         {
             arguments.put("attachments", SlackJSONAttachmentFormatter.encodeAttachments(attachment).toString());
         }
+        if (!unfurl)
+        {
+            arguments.put("unfurl_links", "false");
+            arguments.put("unfurl_media", "false");
+        }
 
         postSlackCommand(arguments, CHAT_POST_MESSAGE_COMMAND, handle);
         return handle;
     }
 
     @Override
-    public SlackMessageHandle deleteMessage(String timeStamp, SlackChannel channel)
+    public SlackMessageHandle<SlackMessageReply> deleteMessage(String timeStamp, SlackChannel channel)
     {
-        SlackMessageHandleImpl handle = new SlackMessageHandleImpl(getNextMessageId());
+        SlackMessageHandleImpl<SlackMessageReply> handle = new SlackMessageHandleImpl<SlackMessageReply>(getNextMessageId());
         Map<String, String> arguments = new HashMap<>();
         arguments.put("token", authToken);
         arguments.put("channel", channel.getId());
@@ -391,9 +457,9 @@ class SlackWebSocketSessionImpl extends AbstractSlackSessionImpl implements Slac
     }
 
     @Override
-    public SlackMessageHandle updateMessage(String timeStamp, SlackChannel channel, String message)
+    public SlackMessageHandle<SlackMessageReply> updateMessage(String timeStamp, SlackChannel channel, String message)
     {
-        SlackMessageHandleImpl handle = new SlackMessageHandleImpl(getNextMessageId());
+        SlackMessageHandleImpl<SlackMessageReply> handle = new SlackMessageHandleImpl<SlackMessageReply>(getNextMessageId());
         Map<String, String> arguments = new HashMap<>();
         arguments.put("token", authToken);
         arguments.put("ts", timeStamp);
@@ -404,9 +470,9 @@ class SlackWebSocketSessionImpl extends AbstractSlackSessionImpl implements Slac
     }
 
     @Override
-    public SlackMessageHandle addReactionToMessage(SlackChannel channel, String messageTimeStamp, String emojiCode)
+    public SlackMessageHandle<SlackMessageReply> addReactionToMessage(SlackChannel channel, String messageTimeStamp, String emojiCode)
     {
-        SlackMessageHandleImpl handle = new SlackMessageHandleImpl(getNextMessageId());
+        SlackMessageHandleImpl<SlackMessageReply> handle = new SlackMessageHandleImpl<SlackMessageReply>(getNextMessageId());
         Map<String, String> arguments = new HashMap<>();
         arguments.put("token", authToken);
         arguments.put("channel", channel.getId());
@@ -417,9 +483,9 @@ class SlackWebSocketSessionImpl extends AbstractSlackSessionImpl implements Slac
     }
 
     @Override
-    public SlackMessageHandle joinChannel(String channelName)
+    public SlackMessageHandle<SlackChannelReply> joinChannel(String channelName)
     {
-        SlackMessageHandleImpl handle = new SlackMessageHandleImpl(getNextMessageId());
+        SlackMessageHandleImpl<SlackChannelReply> handle = new SlackMessageHandleImpl<SlackChannelReply>(getNextMessageId());
         Map<String, String> arguments = new HashMap<>();
         arguments.put("token", authToken);
         arguments.put("name", channelName);
@@ -428,13 +494,76 @@ class SlackWebSocketSessionImpl extends AbstractSlackSessionImpl implements Slac
     }
 
     @Override
-    public SlackMessageHandle leaveChannel(SlackChannel channel)
+    public SlackMessageHandle<SlackChannelReply> leaveChannel(SlackChannel channel)
     {
-        SlackMessageHandleImpl handle = new SlackMessageHandleImpl(getNextMessageId());
+        SlackMessageHandleImpl<SlackChannelReply> handle = new SlackMessageHandleImpl<SlackChannelReply>(getNextMessageId());
         Map<String, String> arguments = new HashMap<>();
         arguments.put("token", authToken);
         arguments.put("channel", channel.getId());
         postSlackCommand(arguments, CHANNELS_LEAVE_COMMAND, handle);
+        return handle;
+    }
+
+    @Override
+    public SlackMessageHandle<SlackChannelReply> inviteToChannel(SlackChannel channel, SlackUser user) {
+      SlackMessageHandleImpl<SlackChannelReply> handle = new SlackMessageHandleImpl<SlackChannelReply>(getNextMessageId());
+      Map<String, String> arguments = new HashMap<>();
+      arguments.put("token", authToken);
+      arguments.put("channel", channel.getId());
+      arguments.put("user", user.getId());
+      postSlackCommand(arguments, CHANNELS_INVITE_COMMAND, handle);
+      return handle;
+    }
+    
+    @Override
+    public SlackMessageHandle<SlackReply> archiveChannel(SlackChannel channel) 
+    {
+      SlackMessageHandleImpl<SlackReply> handle = new SlackMessageHandleImpl<SlackReply>(getNextMessageId());
+      Map<String, String> arguments = new HashMap<>();
+      arguments.put("token", authToken);
+      arguments.put("channel", channel.getId());
+      postSlackCommand(arguments, CHANNELS_ARCHIVE_COMMAND, handle);
+      return handle;
+    }
+    
+    @Override
+    public SlackMessageHandle<SlackChannelReply> openDirectMessageChannel(SlackUser user)
+    {
+        SlackMessageHandleImpl<SlackChannelReply> handle = new SlackMessageHandleImpl<SlackChannelReply>(getNextMessageId());
+        Map<String, String> arguments = new HashMap<>();
+        arguments.put("token", authToken);
+        arguments.put("user", user.getId());
+        postSlackCommand(arguments, DIRECT_MESSAGE_OPEN_CHANNEL_COMMAND, handle);
+        return handle;
+    }
+
+    @Override
+    public SlackMessageHandle<SlackChannelReply> openMultipartyDirectMessageChannel(SlackUser... users)
+    {
+        SlackMessageHandleImpl<SlackChannelReply> handle = new SlackMessageHandleImpl<SlackChannelReply>(getNextMessageId());
+        Map<String, String> arguments = new HashMap<>();
+        arguments.put("token", authToken);
+        StringBuilder strBuilder = new StringBuilder();
+        for (int i = 0 ; i < users.length ; i++) {
+            if (i != 0) {
+                strBuilder.append(',');
+            }
+            strBuilder.append(users[i].getId());
+        }
+        arguments.put("users", strBuilder.toString());
+        postSlackCommand(arguments, MULTIPARTY_DIRECT_MESSAGE_OPEN_CHANNEL_COMMAND, handle);
+
+        SlackMessageHandleImpl<?> check = handle;
+        SlackReply reply = check.getReply();
+        if (reply instanceof GenericSlackReply) {
+            JSONObject obj = ((GenericSlackReply) reply).getPlainAnswer();
+
+            Object ok = obj.get("ok");
+            if (ok != null && ok instanceof Boolean && !((Boolean) ok)) {
+                return null;
+            }
+        }
+
         return handle;
     }
 
@@ -452,14 +581,45 @@ class SlackWebSocketSessionImpl extends AbstractSlackSessionImpl implements Slac
             request.setEntity(new UrlEncodedFormEntity(nameValuePairList, "UTF-8"));
             HttpResponse response = client.execute(request);
             String jsonResponse = CharStreams.toString(new InputStreamReader(response.getEntity().getContent()));
-            SlackReplyImpl reply = SlackJSONReplyParser.decode(parseObject(jsonResponse));
-            handle.setSlackReply(reply);
+            SlackReply reply = SlackJSONReplyParser.decode(parseObject(jsonResponse),this);
+            handle.setReply(reply);
         }
         catch (Exception e)
         {
             // TODO : improve exception handling
             e.printStackTrace();
         }
+    }
+    
+    @Override
+    public SlackMessageHandle<GenericSlackReply> postGenericSlackCommand(Map<String, String> params, String command)
+    {
+        HttpClient client = getHttpClient();
+        HttpPost request = new HttpPost(SLACK_API_HTTPS_ROOT + command);
+        List<NameValuePair> nameValuePairList = new ArrayList<>();
+        for (Map.Entry<String, String> arg : params.entrySet())
+        {
+            if (!"token".equals(arg.getKey())) {
+                nameValuePairList.add(new BasicNameValuePair(arg.getKey(), arg.getValue()));
+            }
+        }
+        nameValuePairList.add(new BasicNameValuePair("token", authToken));
+        try
+        {
+            SlackMessageHandleImpl<GenericSlackReply> handle = new SlackMessageHandleImpl<>(getNextMessageId());
+            request.setEntity(new UrlEncodedFormEntity(nameValuePairList, "UTF-8"));
+            HttpResponse response = client.execute(request);
+            String jsonResponse = CharStreams.toString(new InputStreamReader(response.getEntity().getContent()));
+            GenericSlackReplyImpl reply = new GenericSlackReplyImpl(parseObject(jsonResponse));
+            handle.setReply(reply);
+            return handle;
+        }
+        catch (Exception e)
+        {
+            // TODO : improve exception handling
+            e.printStackTrace();
+        }
+        return null;
     }
 
     private HttpClient getHttpClient()
@@ -477,9 +637,9 @@ class SlackWebSocketSessionImpl extends AbstractSlackSessionImpl implements Slac
     }
 
     @Override
-    public SlackMessageHandle sendMessageOverWebSocket(SlackChannel channel, String message, SlackAttachment attachment)
+    public SlackMessageHandle<SlackMessageReply> sendMessageOverWebSocket(SlackChannel channel, String message, SlackAttachment attachment)
     {
-        SlackMessageHandleImpl handle = new SlackMessageHandleImpl(getNextMessageId());
+        SlackMessageHandleImpl<SlackMessageReply> handle = new SlackMessageHandleImpl<SlackMessageReply>(getNextMessageId());
         try
         {
             JSONObject messageJSON = new JSONObject();
@@ -514,8 +674,8 @@ class SlackWebSocketSessionImpl extends AbstractSlackSessionImpl implements Slac
             HttpResponse response = client.execute(request);
             String jsonResponse = CharStreams.toString(new InputStreamReader(response.getEntity().getContent()));
             JSONObject resultObject = parseObject(jsonResponse);
-
-            SlackReplyImpl reply = SlackJSONReplyParser.decode(resultObject);
+            //quite hacky need to refactor this
+            SlackUserPresenceReply reply = (SlackUserPresenceReply)SlackJSONReplyParser.decode(resultObject,this);
             if (!reply.isOk())
             {
                 return SlackPersona.SlackPresence.UNKNOWN;
@@ -587,9 +747,9 @@ class SlackWebSocketSessionImpl extends AbstractSlackSessionImpl implements Slac
     }
 
     @Override
-    public SlackMessageHandle inviteUser(String email, String firstName, boolean setActive) {
+    public SlackMessageHandle<GenericSlackReply> inviteUser(String email, String firstName, boolean setActive) {
 
-        SlackMessageHandleImpl handle = new SlackMessageHandleImpl(getNextMessageId());
+        SlackMessageHandleImpl<GenericSlackReply> handle = new SlackMessageHandleImpl<GenericSlackReply>(getNextMessageId());
         Map<String, String> arguments = new HashMap<>();
         arguments.put("token", authToken);
         arguments.put("email", email);

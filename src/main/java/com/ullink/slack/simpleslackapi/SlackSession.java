@@ -2,8 +2,10 @@ package com.ullink.slack.simpleslackapi;
 
 import java.io.IOException;
 import java.util.Collection;
-
+import java.util.Map;
 import com.ullink.slack.simpleslackapi.impl.SlackChatConfiguration;
+import com.ullink.slack.simpleslackapi.listeners.ReactionAddedListener;
+import com.ullink.slack.simpleslackapi.listeners.ReactionRemovedListener;
 import com.ullink.slack.simpleslackapi.listeners.SlackChannelArchivedListener;
 import com.ullink.slack.simpleslackapi.listeners.SlackChannelCreatedListener;
 import com.ullink.slack.simpleslackapi.listeners.SlackChannelDeletedListener;
@@ -14,9 +16,12 @@ import com.ullink.slack.simpleslackapi.listeners.SlackGroupJoinedListener;
 import com.ullink.slack.simpleslackapi.listeners.SlackMessageDeletedListener;
 import com.ullink.slack.simpleslackapi.listeners.SlackMessagePostedListener;
 import com.ullink.slack.simpleslackapi.listeners.SlackMessageUpdatedListener;
+import com.ullink.slack.simpleslackapi.replies.GenericSlackReply;
+import com.ullink.slack.simpleslackapi.replies.SlackChannelReply;
+import com.ullink.slack.simpleslackapi.replies.SlackMessageReply;
+import com.ullink.slack.simpleslackapi.replies.SlackReply;
 
-public interface SlackSession
-{
+public interface SlackSession {
 
     Collection<SlackChannel> getChannels();
 
@@ -36,31 +41,55 @@ public interface SlackSession
 
     SlackPersona sessionPersona();
 
+    @Deprecated
     SlackBot findBotById(String botId);
     
-    SlackMessageHandle inviteUser(String email, String firstName, boolean setActive);
+
+    SlackMessageHandle<GenericSlackReply> inviteUser(String email, String firstName, boolean setActive);
 
     void connect() throws IOException;
 
     void disconnect() throws IOException;
 
-    SlackMessageHandle deleteMessage(String timeStamp, SlackChannel channel);
+    SlackMessageHandle<SlackMessageReply> deleteMessage(String timeStamp, SlackChannel channel);
 
-    SlackMessageHandle sendMessage(SlackChannel channel, String message, SlackAttachment attachment, SlackChatConfiguration chatConfiguration);
+    SlackMessageHandle<SlackMessageReply> sendMessage(SlackChannel channel, String message, SlackAttachment attachment, SlackChatConfiguration chatConfiguration, boolean unfurl);
 
-    SlackMessageHandle sendMessage(SlackChannel channel, String message, SlackAttachment attachment);
+    SlackMessageHandle<SlackMessageReply> sendMessage(SlackChannel channel, String message, SlackAttachment attachment, SlackChatConfiguration chatConfiguration);
+
+    SlackMessageHandle<SlackMessageReply> sendMessage(SlackChannel channel, String message, SlackAttachment attachment, boolean unfurl);
+
+    SlackMessageHandle<SlackMessageReply> sendMessage(SlackChannel channel, String message, SlackAttachment attachment);
+
+    SlackMessageHandle<SlackMessageReply> sendMessage(SlackChannel channel, String message, boolean unfurl);
+
+    SlackMessageHandle<SlackMessageReply> sendMessage(SlackChannel channel, String message);
+
+    SlackMessageHandle<SlackMessageReply> sendMessageToUser(SlackUser user, String message, SlackAttachment attachment);
     
-    SlackMessageHandle updateMessage(String timeStamp, SlackChannel channel, String message);
+    SlackMessageHandle<SlackMessageReply> sendMessageToUser(String userName, String message, SlackAttachment attachment);
+    
+    SlackMessageHandle<SlackMessageReply> updateMessage(String timeStamp, SlackChannel channel, String message);
 
-    SlackMessageHandle sendMessageOverWebSocket(SlackChannel channel, String message, SlackAttachment attachment);
+    SlackMessageHandle<SlackMessageReply> sendMessageOverWebSocket(SlackChannel channel, String message, SlackAttachment attachment);
 
-    SlackMessageHandle addReactionToMessage(SlackChannel channel, String messageTimeStamp, String emojiCode);
+    SlackMessageHandle<SlackMessageReply> addReactionToMessage(SlackChannel channel, String messageTimeStamp, String emojiCode);
 
-    SlackMessageHandle joinChannel(String channelName);
+    SlackMessageHandle<SlackChannelReply> joinChannel(String channelName);
 
-    SlackMessageHandle leaveChannel(SlackChannel channel);
+    SlackMessageHandle<SlackChannelReply> leaveChannel(SlackChannel channel);
+    
+    SlackMessageHandle<SlackChannelReply> inviteToChannel(SlackChannel channel, SlackUser user);
+    
+    SlackMessageHandle<SlackReply> archiveChannel(SlackChannel channel);
+
+    SlackMessageHandle<SlackChannelReply> openDirectMessageChannel(SlackUser user);
+
+    SlackMessageHandle<SlackChannelReply> openMultipartyDirectMessageChannel(SlackUser... users);
 
     SlackPersona.SlackPresence getPresence(SlackPersona persona);
+
+    SlackMessageHandle<GenericSlackReply> postGenericSlackCommand(Map<String, String> params, String command);
 
     void addchannelArchivedListener(SlackChannelArchivedListener listener);
 
@@ -98,6 +127,7 @@ public interface SlackSession
 
     void removeGroupJoinedListener(SlackGroupJoinedListener listener);
 
+
     /*
      * Subscribe to events related to the connection to the slack
      * server. At this time a set of status information is exchanged that
@@ -116,4 +146,13 @@ public interface SlackSession
      * @return true if connection is open
      */
     boolean isConnected();
+    
+    void addReactionAddedListener(ReactionAddedListener listener);
+    
+    void removeReactionAddedListener(ReactionAddedListener listener);
+    
+    void addReactionRemovedListener(ReactionRemovedListener listener);
+    
+    void removeReactionRemovedListener(ReactionRemovedListener listener);
+
 }
